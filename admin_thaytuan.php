@@ -8710,11 +8710,25 @@ if (isset($_GET['action'])) {
                 }
             }, [students, uniqueClasses, initialClass]);
 
+            const [isClassSidebarOpen, setIsClassSidebarOpen] = useState(false);
+            const [studentSearchQuery, setStudentSearchQuery] = useState('');
+
             useEffect(() => {
                 setIsScoresSaved(true);
+                setStudentSearchQuery('');
             }, [selectedClass]);
 
             const classStudents = students.filter(s => s.class === selectedClass);
+
+            const filteredStudents = React.useMemo(() => {
+                if (!studentSearchQuery.trim()) return classStudents;
+                const q = studentSearchQuery.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d");
+                return classStudents.filter(s => {
+                    const name = (s.fullName || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d");
+                    const id = (s.id || '').toLowerCase();
+                    return name.includes(q) || id.includes(q);
+                });
+            }, [classStudents, studentSearchQuery]);
 
             const handleCellChange = (studentId, field, val) => {
                 setIsScoresSaved(false);
@@ -9029,58 +9043,101 @@ if (isset($_GET['action'])) {
                             <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center bg-rose-500 text-white hover:bg-rose-600 rounded-full transition-colors shadow-md"><Icon name="x" size={18}/></button>
                         </header>
 
-                        <div className="flex-1 flex overflow-hidden">
-                            {/* Class Sidebar */}
-                            <aside className="w-56 border-r border-slate-100 flex flex-col shrink-0 bg-slate-50/50">
-                                <div className="p-4 border-b border-slate-100">
-                                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Danh sách Lớp học</h3>
+                        <div className="flex-1 flex overflow-hidden relative">
+                            {/* Hover / Slide-out Class Sidebar */}
+                            <div 
+                                className="relative z-30 flex shrink-0"
+                                onMouseEnter={() => setIsClassSidebarOpen(true)}
+                                onMouseLeave={() => setIsClassSidebarOpen(false)}
+                            >
+                                {/* Collapsed slim trigger strip on left edge */}
+                                <div 
+                                    className={`w-3.5 hover:w-6 h-full bg-slate-100/90 hover:bg-sky-50 border-r border-slate-200/80 flex flex-col items-center justify-center cursor-pointer transition-all duration-200 group ${isClassSidebarOpen ? 'hidden' : 'flex'}`}
+                                    title="Rê chuột vào đây hoặc bấm để chọn lớp khác"
+                                    onClick={() => setIsClassSidebarOpen(true)}
+                                >
+                                    <div className="w-1 h-14 bg-slate-300 group-hover:bg-sky-500 rounded-full transition-colors mb-2"></div>
+                                    <Icon name="chevron-right" size={12} className="text-slate-400 group-hover:text-sky-600 transition-transform group-hover:translate-x-0.5" />
                                 </div>
-                                <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
-                                    {uniqueClasses.map(cName => {
-                                        const count = students.filter(s => s.class === cName).length;
-                                        const isSelected = selectedClass === cName;
-                                        
-                                        const cPub = publishStatus[cName];
-                                        let isPub = false;
-                                        if (cPub === true) {
-                                            isPub = true;
-                                        } else if (cPub && typeof cPub === 'object') {
-                                            const semPub = cPub[selectedSemester];
-                                            if (semPub && typeof semPub === 'object') {
-                                                isPub = Object.values(semPub).some(Boolean);
-                                            } else if (selectedSemester === 'hk1') {
-                                                isPub = Object.values(cPub).some(Boolean);
+
+                                {/* Full Class Sidebar Drawer */}
+                                <aside 
+                                    className={`w-64 border-r border-slate-200 bg-white/95 backdrop-blur-xl flex flex-col shadow-2xl transition-all duration-300 ease-in-out absolute top-0 bottom-0 left-0 ${isClassSidebarOpen ? 'translate-x-0 opacity-100' : '-translate-x-full opacity-0 pointer-events-none'}`}
+                                >
+                                    <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/90">
+                                        <div className="flex items-center gap-2">
+                                            <div className="p-1.5 bg-sky-100 text-sky-700 rounded-lg">
+                                                <Icon name="layers" size={13} />
+                                            </div>
+                                            <h3 className="text-[11px] font-black text-slate-700 uppercase tracking-widest">Danh sách Lớp học</h3>
+                                        </div>
+                                        <button 
+                                            type="button" 
+                                            onClick={(e) => { e.stopPropagation(); setIsClassSidebarOpen(false); }} 
+                                            className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-md transition-colors"
+                                            title="Thu gọn danh sách lớp"
+                                        >
+                                            <Icon name="chevron-left" size={15}/>
+                                        </button>
+                                    </div>
+                                    <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+                                        {uniqueClasses.map(cName => {
+                                            const count = students.filter(s => s.class === cName).length;
+                                            const isSelected = selectedClass === cName;
+                                            
+                                            const cPub = publishStatus[cName];
+                                            let isPub = false;
+                                            if (cPub === true) {
+                                                isPub = true;
+                                            } else if (cPub && typeof cPub === 'object') {
+                                                const semPub = cPub[selectedSemester];
+                                                if (semPub && typeof semPub === 'object') {
+                                                    isPub = Object.values(semPub).some(Boolean);
+                                                } else if (selectedSemester === 'hk1') {
+                                                    isPub = Object.values(cPub).some(Boolean);
+                                                }
                                             }
-                                        }
-                                        
-                                        return (
-                                            <button 
-                                                key={cName} 
-                                                onClick={() => setSelectedClass(cName)}
-                                                className={`w-full p-3 rounded-2xl flex justify-between items-center transition-all ${isSelected ? 'bg-sky-600 text-white shadow-lg shadow-sky-600/15' : 'hover:bg-slate-100/80 text-slate-600'}`}
-                                            >
-                                                <div className="text-left">
-                                                    <span className="font-black text-xs uppercase block">{cName}</span>
-                                                    <span className={`text-[8px] font-black uppercase tracking-wider ${isSelected ? 'text-sky-200' : (isPub ? 'text-emerald-500' : 'text-slate-400')}`}>
-                                                        {isPub ? 'Đã công bố' : 'Chưa công bố'}
-                                                    </span>
-                                                </div>
-                                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${isSelected ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-500'}`}>{count}</span>
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-
-
-                            </aside>
+                                            
+                                            return (
+                                                <button 
+                                                    key={cName} 
+                                                    onClick={() => {
+                                                        setSelectedClass(cName);
+                                                        setIsClassSidebarOpen(false);
+                                                    }}
+                                                    className={`w-full p-3 rounded-2xl flex justify-between items-center transition-all ${isSelected ? 'bg-sky-600 text-white shadow-lg shadow-sky-600/15 ring-2 ring-sky-400/30' : 'hover:bg-slate-100/80 text-slate-600'}`}
+                                                >
+                                                    <div className="text-left">
+                                                        <span className="font-black text-xs uppercase block">{cName}</span>
+                                                        <span className={`text-[8px] font-black uppercase tracking-wider ${isSelected ? 'text-sky-200' : (isPub ? 'text-emerald-500' : 'text-slate-400')}`}>
+                                                            {isPub ? 'Đã công bố' : 'Chưa công bố'}
+                                                        </span>
+                                                    </div>
+                                                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${isSelected ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-500'}`}>{count}</span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </aside>
+                            </div>
 
                             {/* Main Content Area */}
                             <div className="flex-1 flex flex-col overflow-hidden bg-white">
                                 {selectedClass ? (
                                     <>
                                         <div className="p-4 border-b border-slate-100 bg-slate-50/20 flex flex-wrap justify-between items-center gap-4 shrink-0">
-                                            <div className="flex items-center gap-4 flex-wrap">
-                                                <h3 className="font-black text-slate-800 text-sm">BẢNG ĐIỂM LỚP: <span className="bg-sky-100 text-sky-700 px-2 py-0.5 rounded-md font-black">{selectedClass}</span></h3>
+                                            <div className="flex items-center gap-3 flex-wrap">
+                                                <button 
+                                                    type="button" 
+                                                    onClick={() => setIsClassSidebarOpen(prev => !prev)}
+                                                    className="px-2.5 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200/80 rounded-xl font-black text-xs flex items-center gap-1.5 transition-all shadow-sm"
+                                                    title="Bấm để mở danh sách lớp (hoặc rê chuột vào mép trái)"
+                                                >
+                                                    <Icon name="layers" size={13} />
+                                                    <span>LỚP: <b className="text-sky-800 uppercase font-black">{selectedClass}</b></span>
+                                                    <Icon name="chevron-down" size={11} className={`transition-transform duration-200 ${isClassSidebarOpen ? 'rotate-180' : ''}`} />
+                                                </button>
+
                                                 {/* Semester Tabs */}
                                                 <div className="flex bg-slate-100 rounded-lg p-0.5 border border-slate-200">
                                                     <button 
@@ -9096,6 +9153,33 @@ if (isset($_GET['action'])) {
                                                         Học kỳ II
                                                     </button>
                                                 </div>
+
+                                                {/* Student Search Box */}
+                                                <div className="relative flex items-center">
+                                                    <Icon name="search" size={13} className="absolute left-3 text-slate-400 pointer-events-none" />
+                                                    <input 
+                                                        type="text" 
+                                                        value={studentSearchQuery} 
+                                                        onChange={e => setStudentSearchQuery(e.target.value)} 
+                                                        placeholder="Tìm tên hoặc mã HS..." 
+                                                        className="pl-8 pr-7 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 w-44 sm:w-56 transition-all shadow-inner"
+                                                    />
+                                                    {studentSearchQuery && (
+                                                        <button 
+                                                            type="button" 
+                                                            onClick={() => setStudentSearchQuery('')} 
+                                                            className="absolute right-2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-100"
+                                                            title="Xóa tìm kiếm"
+                                                        >
+                                                            <Icon name="x" size={12} />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                {studentSearchQuery.trim() && (
+                                                    <span className="text-[10px] font-black text-sky-700 bg-sky-50 px-2 py-1 rounded-lg border border-sky-100 hidden sm:inline-block">
+                                                        {filteredStudents.length}/{classStudents.length} HS
+                                                    </span>
+                                                )}
                                             </div>
                                             
                                             <div className="flex flex-wrap gap-2 w-full sm:w-auto">
@@ -9292,59 +9376,70 @@ if (isset($_GET['action'])) {
                                                             </tr>
                                                         </thead>
                                                         <tbody className="divide-y divide-slate-100/60">
-                                                            {classStudents.map((s, idx) => {
-                                                                const sScores = scoresGrid[s.id] || { tx1: '', tx2: '', tx3: '', tx4: '', tx5: '', gk: '', ck: '' };
-                                                                return (
-                                                                    <tr key={s.id} className="text-xs text-slate-700 hover:bg-slate-50/30 transition-colors">
-                                                                        <td className="py-2 pl-4 text-left font-bold text-slate-400">{String(idx + 1).padStart(2, '0')}</td>
-                                                                        <td className="py-2 text-left font-mono font-bold text-slate-400">{s.id}</td>
-                                                                        <td className="py-2 text-left font-bold text-slate-800 pl-2">
-                                                                            <div className="flex items-center gap-1.5">
-                                                                                <span>{s.fullName}</span>
-                                                                                <button
-                                                                                    type="button"
-                                                                                    onClick={() => setEditingStudentInfo(s)}
-                                                                                    className="p-1 text-slate-400 hover:text-sky-600 hover:bg-sky-100/70 rounded-md transition-all shrink-0"
-                                                                                    title="Chỉnh sửa thông tin học sinh (Mã HS, Họ tên, Lớp, Mật khẩu)"
-                                                                                >
-                                                                                    <Icon name="edit-3" size={12} />
+                                                            {filteredStudents.length === 0 ? (
+                                                                <tr>
+                                                                    <td colSpan="11" className="py-12 text-center text-slate-400">
+                                                                        <Icon name="search" size={24} className="mx-auto mb-2 opacity-40" />
+                                                                        <p className="font-bold text-xs">Không tìm thấy học sinh nào phù hợp với &quot;{studentSearchQuery}&quot;</p>
+                                                                    </td>
+                                                                </tr>
+                                                            ) : (
+                                                                filteredStudents.map((s, idx) => {
+                                                                    const origIdx = classStudents.findIndex(item => item.id === s.id);
+                                                                    const displayIdx = origIdx !== -1 ? origIdx : idx;
+                                                                    const sScores = scoresGrid[s.id] || { tx1: '', tx2: '', tx3: '', tx4: '', tx5: '', gk: '', ck: '' };
+                                                                    return (
+                                                                        <tr key={s.id} className="text-xs text-slate-700 hover:bg-slate-50/30 transition-colors">
+                                                                            <td className="py-2 pl-4 text-left font-bold text-slate-400">{String(displayIdx + 1).padStart(2, '0')}</td>
+                                                                            <td className="py-2 text-left font-mono font-bold text-slate-400">{s.id}</td>
+                                                                            <td className="py-2 text-left font-bold text-slate-800 pl-2">
+                                                                                <div className="flex items-center gap-1.5">
+                                                                                    <span>{s.fullName}</span>
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() => setEditingStudentInfo(s)}
+                                                                                        className="p-1 text-slate-400 hover:text-sky-600 hover:bg-sky-100/70 rounded-md transition-all shrink-0"
+                                                                                        title="Chỉnh sửa thông tin học sinh (Mã HS, Họ tên, Lớp, Mật khẩu)"
+                                                                                    >
+                                                                                        <Icon name="edit-3" size={12} />
+                                                                                    </button>
+                                                                                </div>
+                                                                            </td>
+                                                                            <td className="py-1">
+                                                                                <input type="text" value={sScores.tx1 || ''} onChange={e => handleCellChange(s.id, 'tx1', e.target.value)} className="w-12 px-1 py-1 border border-emerald-200 bg-emerald-50/30 text-emerald-800 rounded-lg text-center font-bold outline-none focus:bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 text-xs" />
+                                                                            </td>
+                                                                            <td className="py-1">
+                                                                                <input type="text" value={sScores.tx2 || ''} onChange={e => handleCellChange(s.id, 'tx2', e.target.value)} className="w-12 px-1 py-1 border border-emerald-200 bg-emerald-50/30 text-emerald-800 rounded-lg text-center font-bold outline-none focus:bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 text-xs" />
+                                                                            </td>
+                                                                            <td className="py-1">
+                                                                                <input type="text" value={sScores.tx3 || ''} onChange={e => handleCellChange(s.id, 'tx3', e.target.value)} className="w-12 px-1 py-1 border border-emerald-200 bg-emerald-50/30 text-emerald-800 rounded-lg text-center font-bold outline-none focus:bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 text-xs" />
+                                                                            </td>
+                                                                            <td className="py-1">
+                                                                                <input type="text" value={sScores.tx4 || ''} onChange={e => handleCellChange(s.id, 'tx4', e.target.value)} className="w-12 px-1 py-1 border border-emerald-200 bg-emerald-50/30 text-emerald-800 rounded-lg text-center font-bold outline-none focus:bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 text-xs" />
+                                                                            </td>
+                                                                            <td className="py-1">
+                                                                                <input type="text" value={sScores.tx5 || ''} onChange={e => handleCellChange(s.id, 'tx5', e.target.value)} className="w-12 px-1 py-1 border border-emerald-200 bg-emerald-50/30 text-emerald-800 rounded-lg text-center font-bold outline-none focus:bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 text-xs" />
+                                                                            </td>
+                                                                            <td className="py-1">
+                                                                                <input type="text" value={sScores.gk || ''} onChange={e => handleCellChange(s.id, 'gk', e.target.value)} className="w-14 px-1 py-1 border border-violet-200 bg-violet-50/35 text-violet-850 rounded-lg text-center font-black outline-none focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-500/20 text-xs" />
+                                                                            </td>
+                                                                            <td className="py-1">
+                                                                                <input type="text" value={sScores.ck || ''} onChange={e => handleCellChange(s.id, 'ck', e.target.value)} className="w-14 px-1 py-1 border border-rose-200 bg-rose-50/30 text-rose-850 rounded-lg text-center font-black outline-none focus:bg-white focus:border-rose-500 focus:ring-1 focus:ring-rose-500/20 text-xs" />
+                                                                            </td>
+                                                                            <td className="py-1 border-l border-slate-100">
+                                                                                <button onClick={() => setEditingBonusPoints({ ...s, semester: 'hk1' })} className="px-2 py-1 bg-pink-50 hover:bg-pink-100 text-pink-700 font-black rounded-lg border border-pink-150 text-[10px] transition-all shadow-sm">
+                                                                                    +{typeof s.bonusPoints === 'object' ? (s.bonusPoints.hk1 || 0) : (s.bonusPoints || 0)}
                                                                                 </button>
-                                                                            </div>
-                                                                        </td>
-                                                                        <td className="py-1">
-                                                                            <input type="text" value={sScores.tx1 || ''} onChange={e => handleCellChange(s.id, 'tx1', e.target.value)} className="w-12 px-1 py-1 border border-emerald-200 bg-emerald-50/30 text-emerald-800 rounded-lg text-center font-bold outline-none focus:bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 text-xs" />
-                                                                        </td>
-                                                                        <td className="py-1">
-                                                                            <input type="text" value={sScores.tx2 || ''} onChange={e => handleCellChange(s.id, 'tx2', e.target.value)} className="w-12 px-1 py-1 border border-emerald-200 bg-emerald-50/30 text-emerald-800 rounded-lg text-center font-bold outline-none focus:bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 text-xs" />
-                                                                        </td>
-                                                                        <td className="py-1">
-                                                                            <input type="text" value={sScores.tx3 || ''} onChange={e => handleCellChange(s.id, 'tx3', e.target.value)} className="w-12 px-1 py-1 border border-emerald-200 bg-emerald-50/30 text-emerald-800 rounded-lg text-center font-bold outline-none focus:bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 text-xs" />
-                                                                        </td>
-                                                                        <td className="py-1">
-                                                                            <input type="text" value={sScores.tx4 || ''} onChange={e => handleCellChange(s.id, 'tx4', e.target.value)} className="w-12 px-1 py-1 border border-emerald-200 bg-emerald-50/30 text-emerald-800 rounded-lg text-center font-bold outline-none focus:bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 text-xs" />
-                                                                        </td>
-                                                                        <td className="py-1">
-                                                                            <input type="text" value={sScores.tx5 || ''} onChange={e => handleCellChange(s.id, 'tx5', e.target.value)} className="w-12 px-1 py-1 border border-emerald-200 bg-emerald-50/30 text-emerald-800 rounded-lg text-center font-bold outline-none focus:bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 text-xs" />
-                                                                        </td>
-                                                                        <td className="py-1">
-                                                                            <input type="text" value={sScores.gk || ''} onChange={e => handleCellChange(s.id, 'gk', e.target.value)} className="w-14 px-1 py-1 border border-violet-200 bg-violet-50/35 text-violet-850 rounded-lg text-center font-black outline-none focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-500/20 text-xs" />
-                                                                        </td>
-                                                                        <td className="py-1">
-                                                                            <input type="text" value={sScores.ck || ''} onChange={e => handleCellChange(s.id, 'ck', e.target.value)} className="w-14 px-1 py-1 border border-rose-200 bg-rose-50/30 text-rose-850 rounded-lg text-center font-black outline-none focus:bg-white focus:border-rose-500 focus:ring-1 focus:ring-rose-500/20 text-xs" />
-                                                                        </td>
-                                                                        <td className="py-1 border-l border-slate-100">
-                                                                            <button onClick={() => setEditingBonusPoints({ ...s, semester: 'hk1' })} className="px-2 py-1 bg-pink-50 hover:bg-pink-100 text-pink-700 font-black rounded-lg border border-pink-150 text-[10px] transition-all shadow-sm">
-                                                                                +{typeof s.bonusPoints === 'object' ? (s.bonusPoints.hk1 || 0) : (s.bonusPoints || 0)}
-                                                                            </button>
-                                                                        </td>
-                                                                        <td className="py-1 border-l border-slate-100">
-                                                                            <button onClick={() => setEditingBonusPoints({ ...s, semester: 'hk2' })} className="px-2 py-1 bg-pink-50 hover:bg-pink-100 text-pink-700 font-black rounded-lg border border-pink-150 text-[10px] transition-all shadow-sm">
-                                                                                +{typeof s.bonusPoints === 'object' ? (s.bonusPoints.hk2 || 0) : 0}
-                                                                            </button>
-                                                                        </td>
-                                                                    </tr>
-                                                                );
-                                                            })}
+                                                                            </td>
+                                                                            <td className="py-1 border-l border-slate-100">
+                                                                                <button onClick={() => setEditingBonusPoints({ ...s, semester: 'hk2' })} className="px-2 py-1 bg-pink-50 hover:bg-pink-100 text-pink-700 font-black rounded-lg border border-pink-150 text-[10px] transition-all shadow-sm">
+                                                                                    +{typeof s.bonusPoints === 'object' ? (s.bonusPoints.hk2 || 0) : 0}
+                                                                                </button>
+                                                                            </td>
+                                                                        </tr>
+                                                                    );
+                                                                })
+                                                            )}
                                                         </tbody>
                                                     </table>
                                                 </div>
